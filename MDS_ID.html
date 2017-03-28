@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="js/jquery.min.js"></script>
+    <script src="js/jquery-ui.min.js"></script>
+    <script src="js/jspsych.js"></script>
+    <script src="js/jspsych-instructions.js"></script>
+    <script src="js/jspsych-image-multi-choice.js"></script>
+
+    <script src="js/canvasjs-1.8.0/canvasjs.min.js"></script>
+    <link rel="stylesheet" href="css/jquery-ui.css"></link>
+    <link rel="stylesheet" href="css/jspsych.css"></link>
+    <style>
+      img {
+        width: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="jspsych-target"></div>
+  </body>
+  <script>
+
+  function get_subj() {
+    //Because AJAX fetches data via a separate HTTP request it won't include
+    //any information from the HTTP request that fetched the HTML document.
+    //Thus $_GET will be empty in the PHP script.
+    //This gets the url parameters and sends them to the PHP script.
+    var parts = window.location.search.substr(1).split("&");
+    var subj = {};
+    for (var i = 0; i < parts.length; i++) {
+        var temp = parts[i].split("=");
+        subj[decodeURIComponent(temp[0])] = decodeURIComponent(temp[1]);
+    }
+    return (subj);
+  }
+
+  function get_subj_num() {
+
+      var result = "";
+      $.ajax({
+          type: 'POST',
+          url: 'next_subj.php',
+          dataType: 'text',
+          async: false,
+          success: function (data) {
+              result = data;
+          }
+      });
+      return result;
+  }
+
+  function read_text(file_name) {
+
+      var result = "";
+      $.ajax({
+          url: 'read_text.php',
+          type: 'POST',
+          data: { file_name: file_name },
+          dataType: 'text',
+          async: false,
+          success: function (data) {
+              result = data;
+          }
+      });
+      return result;
+
+  }
+
+  // read in stimline for both similarity judgment and identification task
+  var subj_num = get_subj_num();
+  subj_num = subj_num%2+1
+  var list_file = 'list/identification_stimline_' + subj_num + '.js';
+  eval(read_text(list_file));
+  if (subj_num == '') eval(read_text('list/identification_stimline_1.js'));
+
+  var instruction1 = {
+    type: 'instructions',
+    pages: [
+      '<center>Welcome! </center><br>In this experiment, you will be asked to identify 20 bird species.'+
+      'You will be presented with one bird picture at a time and a list of possible species labels.'+
+      "<br><br>We understand that people will often use color, habitat, sound, etc. in identifying birds. However, since we are interested in factors other than those, we use only black-and-white pictures."+
+      "<br><br>Please note that this is a speeded bird knowledge test. " +
+      "The picture will stay on the screen for only 5 seconds. Try to respond within 5 seconds, " +
+      "and always make a response even if you have to guess." +
+      "<br><br>The task is difficult and we expect " +
+      "that even the best bird experts will not get all the identifications correct." +
+      "<br><br> Please don't refer to any books or the Internet for help during the test." +
+      '<br><br>The test lasts about 15 minutes. Click "Next" to begin. Enjoy!'
+    ],
+    show_clickable_nav: true
+  }
+
+  var instruction2 = {
+    type: 'instructions',
+    pages: [
+      '<br><br><br>Thank you so much for completing our main experiment and for your contribution to science!<br><br>'
+    ],
+    show_clickable_nav: true
+  }
+
+  var ID_block = {
+      type: 'image-multi-choice',
+      questions: ["What is the species of this bird?"],
+      options: [labels],  // need one scale for every question on a page
+      required: [true],   // set whether questions are required
+      timeline: imageline,
+      progress_report: "true"
+  };
+
+  function saveData(filename, filedata){
+   $.ajax({
+      type:'post',
+      cache: false,
+      url: 'save_data.php', // this is the path to the above PHP script
+      data: {filename: filename, filedata: filedata}
+   });
+  }
+
+  var subj = get_subj();
+  var d = new Date();
+  var timei = '_'+d.getFullYear()+'_'+(1+d.getMonth())+'_'+d.getDate()+'_'+(1+d.getHours())+'_'+(1+d.getMinutes());
+  var filename_i = subj.part_id+timei;
+
+  jsPsych.init({
+    display_element: $('#jspsych-target'),
+    timeline: [instruction1,ID_block,instruction2], //
+    on_finish: function(){
+      var save = function() {
+        saveData((filename_i+'_MDS.json'), jsPsych.data.dataAsJSON());
+        saveData((filename_i+'_MDS.csv'), jsPsych.data.dataAsCSV());
+      }
+      $.when( save() ).done(function(){
+        var ID_data = jsPsych.data.getTrialsOfType('image-multi-choice');
+        var ID_acc = 0;
+        for (var i = 0; i < ID_data.length; i++) {
+          var response_i = JSON.parse(ID_data[i].responses).Q0
+          var ID_acc = ID_acc+Number(response_i==ID_data[i].answer[0]);
+        }
+        $("#jspsych-target").html("<br><br><br><center>Great! You correctly identified "+ID_acc+" out of 20 Warblers."+"<br><br>Thank you for your participation in our experiment. <br>Your effort is greatly appreciated! <br><br> Please close this window to return to our website.</center>");
+      });
+    }
+  });
+
+
+  </script>
+</html>
